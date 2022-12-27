@@ -2,13 +2,14 @@ import time
 import math
 from queue import PriorityQueue
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
 
 class Grid:
-    def __init__(self, height, width):
+    def __init__(self, height, width, seed=None):
         # Set seed for random number generator
-        self.rng = np.random.default_rng(0)
+        self.rng = np.random.default_rng(seed)
 
         # Create grid
         self.height = height
@@ -94,8 +95,45 @@ class Grid:
 
         return neighbours_indexes
 
-    # Return a list of cell indexes that form a path from the start cell to the end cell
-    def find_path(self):
+    # Use a random walk to return a list of cell indexes that form a path from the start cell to
+    # the end cell
+    def random_path(self):
+        path = []
+
+        previous_cell = self.start_cell
+        current_cell = self.start_cell
+
+        # Loop until end cell is reached
+        while current_cell != self.end_cell:
+            # Add the current cell to the path and get all its neighbours
+            path.append(current_cell)
+            neighbours = self.get_cell_neighbours(current_cell)
+
+            #self.display_grid([current_cell])
+
+            # Initialise next cell with a random neighbour that isn't the previous cell
+            next_cell = neighbours[self.rng.integers(0, len(neighbours))]
+            while next_cell == previous_cell:
+                next_cell = neighbours[self.rng.integers(0, len(neighbours))]
+
+            # If next cell is the end cell, break out of loop
+            if next_cell == self.end_cell:
+                current_cell = next_cell
+                break
+
+            # Make previous cell the current cell and the current cell the next cell
+            previous_cell = current_cell
+            current_cell = next_cell
+
+        # Remove start cell from path, add the end cell and return it
+        path.pop(0)
+        path.append(current_cell)
+
+        return path
+
+    # Use cells distance to the end and their cost to return a list of cell indexes that form a
+    # path from the start cell to the end cell
+    def custom_path(self):
         path = []
 
         previous_cell = self.start_cell
@@ -119,8 +157,8 @@ class Grid:
                     break
 
                 # Assign the next cell and the neighbour costs using their distance to the end and their cost
-                next_cell_cost = math.dist(next_cell, self.end_cell) - (10 - self.grid[next_cell]) / 3
-                neighbour_cost = math.dist(neighbour, self.end_cell) - (10 - self.grid[neighbour]) / 3
+                next_cell_cost = math.dist(next_cell, self.end_cell) - (10 - self.grid[next_cell]) / 5
+                neighbour_cost = math.dist(neighbour, self.end_cell) - (10 - self.grid[neighbour]) / 5
 
                 # If the neighbour's cost is lower than the next cell cost and the neighbour is not the
                 # previous cell, make the next cell the neighbour
@@ -141,9 +179,9 @@ class Grid:
 
         return path
 
-    # Use dijkstra algorithm to return a list of cell indexes that form the shortest path from
-    # the start cell to the end cell
-    def dijkstra(self):
+    # Use dijkstra algorithm to return a list of cell indexes that form the shortest path from the
+    # start cell to the end cell
+    def dijkstra_path(self):
         path = []
 
         # Add start cell to priority queue with a cost of 0
@@ -208,14 +246,3 @@ class Grid:
             length += self.grid[cell]
 
         return length
-
-
-grid = Grid(4, 8)
-
-grid.traverse_path(grid.find_path())
-grid.display_grid(grid.find_path())
-print(grid.get_path_length(grid.find_path()))
-
-grid.traverse_path(grid.dijkstra())
-grid.display_grid(grid.dijkstra())
-print(grid.get_path_length(grid.dijkstra()))
