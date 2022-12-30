@@ -5,12 +5,13 @@ import idx2numpy
 from matplotlib import pyplot as plt
 
 
-@np.vectorize
+# The Sigmoid function, which describes an S shaped curve.
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
 
-@np.vectorize
+# The derivative of the Sigmoid function.
+# This is the gradient of the Sigmoid curve.
 def sigmoid_derivative(x):
     return x * (1.0 - x)
 
@@ -27,11 +28,11 @@ def softmax(x):
     return np.exp(x) / sum(np.exp(x))
 
 
-def one_hot(Y):
-    one_hot_Y = np.zeros((Y.size, Y.max() + 1))
-    one_hot_Y[np.arange(Y.size), Y] = 1
-    one_hot_Y = one_hot_Y.T
-    return one_hot_Y
+def one_hot_encoder(x):
+    one_hot = np.zeros((x.size, x.max() + 1))
+    one_hot[np.arange(x.size), x] = 1
+    one_hot = one_hot.T
+    return one_hot
 
 
 # https://stackoverflow.com/questions/47493559/valueerror-non-broadcastable-output-operand-with-shape-3-1-doesnt-match-the
@@ -63,7 +64,10 @@ class NeuralNetwork:
         # https://medium.com/@glenmeyerowitz/bias-initialization-in-a-neural-network-2e5d26fed0f0
         # Set bias for each hidden layer + the output layer to 0
         for i in range(self.hidden_layers_amount + 1):
-            self.biases.append(np.zeros((hidden_nodes_amount, 1)))
+            if i == self.hidden_layers_amount:
+                self.biases.append(np.zeros((self.output_nodes_amount, 1)))
+            else:
+                self.biases.append(np.zeros((self.hidden_nodes_amount, 1)))
 
     def generate_weights(self, previous_nodes_amount, next_nodes_amount):
         # https://machinelearningmastery.com/weight-initialization-for-deep-learning-neural-networks/
@@ -111,7 +115,6 @@ class NeuralNetwork:
     def forward_propagation(self, input_vector):
         # Perform calculations for each hidden layer + the output layer
         # Z: Dot product of input and weight + bias, A: Activation of Z
-        # Input vector: X
         Z = []
         A = []
         for i in range(self.hidden_layers_amount + 1):
@@ -131,7 +134,6 @@ class NeuralNetwork:
     def backward_propagation(self, Z, A,  input_vector, output_vector):
         # Perform calculations for each hidden layer + the output layer
         # Z: Dot product of input and weight + bias, A: Activation of Z
-        # Input vector: X, Output vector: Y
         # input_vector.shape[1]: m
         m = input_vector.shape[1]
         Z_derivatives = []
@@ -139,22 +141,21 @@ class NeuralNetwork:
         biases_derivatives = []
         for i in range(self.hidden_layers_amount, -1, -1):
             if i == 0:
-                Z_derivatives.append(np.dot(self.weights[i + 1], Z_derivatives[len(Z_derivatives) - 1]) * ReLU_derivative(Z[i]))
+                Z_derivatives.append(np.dot(self.weights[i + 1].T, Z_derivatives[len(Z_derivatives) - 1]) * ReLU_derivative(Z[i]))
                 weights_derivatives.append(1 / m * np.dot(Z_derivatives[i], input_vector.T))
                 biases_derivatives.append(1 / m * np.sum(Z_derivatives[i]))
             elif i == self.hidden_layers_amount:
-                Z_derivatives.append(A[i] - one_hot(output_vector))
+                Z_derivatives.append(A[i] - one_hot_encoder(output_vector))
                 weights_derivatives.append(1 / m * np.dot(Z_derivatives[0], A[i - 1].T))
                 biases_derivatives.append(1 / m * np.sum(Z_derivatives[0]))
-            # else:
-            #     Z_derivatives.append(np.dot(self.weights[i + 1], Z_derivatives[len(Z_derivatives)-1]) * ReLU_derivative(Z[i]))
-            #     weights_derivatives.append(1 / m * np.dot(Z_derivatives[i], A[i - 1].T))
-            #     biases_derivatives.append(1 / m * np.sum(Z_derivatives[i]))
+            else:
+                Z_derivatives.append(np.dot(self.weights[i + 1], Z_derivatives[len(Z_derivatives)-1]) * ReLU_derivative(Z[i]))
+                weights_derivatives.append(1 / m * np.dot(Z_derivatives[len(Z_derivatives)-1], A[i - 1].T))
+                biases_derivatives.append(1 / m * np.sum(Z_derivatives[len(Z_derivatives)-1]))
 
         return weights_derivatives, biases_derivatives
 
     def update_parameters(self, weights_derivatives, biases_derivatives):
-
         weights_derivatives.reverse()
         biases_derivatives.reverse()
         for i in range(self.hidden_layers_amount + 1):
@@ -166,12 +167,11 @@ class NeuralNetwork:
         for i in range(epochs):
             Z = []
             A = []
-            for j in range(self.hidden_layers_amount + 1):
-                # Z: Dot product of input and weight + bias, A: Activation of Z
-                # Input vector: X, Output vector: Y
-                Z, A = self.forward_propagation(input_vector)
-                weights_derivatives, biases_derivatives = self.backward_propagation(Z, A, input_vector, output_vector)
-                self.update_parameters(weights_derivatives, biases_derivatives)
+            # Z: Dot product of input and weight + bias, A: Activation of Z
+            # Input vector: X, Output vector: Y
+            Z, A = self.forward_propagation(input_vector)
+            weights_derivatives, biases_derivatives = self.backward_propagation(Z, A, input_vector, output_vector)
+            self.update_parameters(weights_derivatives, biases_derivatives)
             if i % 10 == 0:
                 print("Iteration: ", i)
                 predictions = self.get_predictions(A[self.hidden_layers_amount])
@@ -193,7 +193,7 @@ class NeuralNetwork:
 seed = 1
 rng = np.random.default_rng(seed)
 
-data_path = join(dirname(abspath(__file__)), 'data')
+data_path = join(dirname(dirname(abspath(__file__))), 'data')
 
 # Load image and label files and convert them to numpy array
 image_file = join(data_path, 'train-images-idx3-ubyte')
@@ -206,7 +206,7 @@ label_array = idx2numpy.convert_from_file(label_file)
 data = np.c_[label_array, image_array.reshape(60000, 784)]
 
 row_amount, column_amount = data.shape
-np.random.shuffle(data)  # shuffle before splitting into dev and training sets
+rng.shuffle(data)  # shuffle before splitting into dev and training sets
 
 testing_data = data[0:15000].T
 testing_data_Y = testing_data[0]
