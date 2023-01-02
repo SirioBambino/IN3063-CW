@@ -1,6 +1,16 @@
+from time import process_time
+
 import torch
 import torch.nn as nn
-from time import perf_counter
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+
+
+training_data = datasets.FashionMNIST(root="data", train=True, download=True, transform=transforms.ToTensor())
+testing_data = datasets.FashionMNIST(root="data", train=False, download=True, transform=transforms.ToTensor())
+
+training_loader = torch.utils.data.DataLoader(training_data, batch_size=100)
+testing_loader = torch.utils.data.DataLoader(testing_data, batch_size=100, shuffle=True)
 
 
 def calculate_accuracy(predictions, labels):
@@ -47,12 +57,12 @@ class CNN(nn.Module):
         for epoch in range(epochs):
             print("Epoch: {0}/{1}".format(epoch + 1, epochs))
             # Start counter to calculate run time of epoch
-            epoch_start = perf_counter()
+            epoch_start = process_time()
             count = 0
             for images, labels in data_loader:
 
                 # Start counter to calculate run time of iteration
-                iteration_start = perf_counter()
+                iteration_start = process_time()
 
                 # Set model to training mode
                 self.train()
@@ -67,7 +77,7 @@ class CNN(nn.Module):
                 optimiser.step()
 
                 # End counter to calculate run time of iteration
-                iteration_end = perf_counter()
+                iteration_end = process_time()
 
                 count += 1
 
@@ -78,9 +88,9 @@ class CNN(nn.Module):
 
                     # Forward propagation
                     outputs = self(images)
-                    loss = error_function(outputs, labels)
 
-                    # Calculate accuracy
+                    # Calculate loss and accuracy
+                    loss = error_function(outputs, labels)
                     predictions = torch.max(outputs, 1)[1]
                     accuracy = calculate_accuracy(predictions, labels)
 
@@ -94,7 +104,7 @@ class CNN(nn.Module):
                           "Computation time: {0:.2f}ms".format((iteration_end - iteration_start) * 1000))
 
             # End counter to calculate run time of epoch
-            epoch_end = perf_counter()
+            epoch_end = process_time()
             print("Epoch computation time: {0:.2f}s\n".format((epoch_end - epoch_start)))
 
     def predict(self, data_loader, error_function):
@@ -113,3 +123,22 @@ class CNN(nn.Module):
         accuracy = calculate_accuracy(predictions, all_labels)
         print("Accuracy: {0:.4f}".format(accuracy), "Loss: {0:.4f}".format(loss))
         return predictions, all_labels
+
+
+seed = 0
+torch.manual_seed(0)
+
+model = CNN()
+
+loss_list = []
+iteration_list = []
+accuracy_list = []
+
+model.fit(training_loader, epochs=1, error_function=nn.CrossEntropyLoss(),
+          optimiser=torch.optim.Adam(model.parameters(), 0.001))
+
+predictions, labels = model.predict(training_loader, error_function=nn.CrossEntropyLoss())
+
+from confusion_matrix import confusion_matrix
+
+confusion_matrix = confusion_matrix(predictions.numpy(), labels.numpy())

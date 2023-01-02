@@ -1,9 +1,10 @@
 import math
-import numpy as np
+from time import process_time
 from os.path import dirname, abspath, join
+
 import idx2numpy
+import numpy as np
 from matplotlib import pyplot as plt
-from time import perf_counter
 
 
 def sigmoid(inputs):
@@ -147,7 +148,7 @@ class NeuralNetwork:
                     # Use dropout rate to calculate the number of nodes to drop out, then create a matrix of random
                     # indexes that represent the nodes that will be dropped
                     dropped_nodes_amount = round(layer_size * dropout_rate)
-                    dropped_nodes = rng.integers(0, layer_size, (input_size, layer_size))
+                    dropped_nodes = self.rng.integers(0, layer_size, (input_size, layer_size))
                     dropped_nodes = dropped_nodes.argpartition(dropped_nodes_amount,axis=1)[:,:dropped_nodes_amount]
                     # Set value of the dropped nodes in the layer to 0
                     index = 0
@@ -194,49 +195,67 @@ class NeuralNetwork:
     # Train the network against the given data
     def fit(self, X, y, epochs, batch_size, stopping_threshold, dropout_rate):
         loss_list = []
+        X = X.T
         for epoch in range(epochs):
+            print("Epoch: {0}/{1}".format(epoch + 1, epochs))
             # Start counter to calculate run time of epoch
-            start = perf_counter()
+            epoch_start = process_time()
 
             # Shuffle the data
-            # shuffler = self.rng.permutation(len(X))
-            # X = X.T[shuffler]
-            # y = y[shuffler]
-            #
-            # for start in range(0, X.shape[0], batch_size):
-            #     end = start + batch_size
-            #     X_batch = X[start:end].T
-            #     y_batch = y[start:end]
+            shuffler = self.rng.permutation(len(X))
+            X = X[shuffler]
+            y = y[shuffler]
 
-            # Perform forward propagation, backward propagation and then update the weights and biases
-            Z, A = self.forward_propagation(X, dropout_rate)
-            weights_derivatives, biases_derivatives = self.backward_propagation(Z, A, X, y)
-            self.update_parameters(weights_derivatives, biases_derivatives)
+            accuracy = 0
+            loss = 0
+            count = 0
 
-            # The network's predictions after an epoch cycle
-            Z, A = self.forward_propagation(X, 0)
-            predictions = np.argmax(A[self.hidden_layers_amount], 0)
-            # Calculate the accuracy and mean squared error using the predictions
-            accuracy = calculate_accuracy(predictions, y)
-            loss = calculate_MSE(predictions, y)
+            # Iterate through each batch of the dataset
+            for start in range(0, X.shape[0], batch_size):
 
-            # End counter to calculate run time of epoch
-            end = perf_counter()
+                # Start counter to calculate run time of iteration
+                iteration_start = process_time()
 
-            # Print some information about the model every 10 epochs
-            if epoch % 10 == 0:
-                print("Epoch: {0}/{1}".format(epoch, epochs), "Computation time: {0:.2f}ms".format((end-start)*1000))
-                # Z, A = self.forward_propagation(X)
-                print("Accuracy: {0:.4f}".format(accuracy), "Loss: {0:.4f}\n".format(loss))
+                end = start + batch_size
+                X_batch = X[start:end].T
+                y_batch = y[start:end]
+
+                # Perform forward propagation, backward propagation and then update the weights and biases
+                Z, A = self.forward_propagation(X_batch, dropout_rate)
+                weights_derivatives, biases_derivatives = self.backward_propagation(Z, A, X_batch, y_batch)
+                self.update_parameters(weights_derivatives, biases_derivatives)
+
+                # End counter to calculate run time of iteration
+                iteration_end = process_time()
+
+                count += 1
+
+                # Print some information about the model every 50 iterations
+                if count % 50 == 0:
+                    # Forward propagation
+                    Z, A = self.forward_propagation(X_batch, 0)
+
+                    # Calculate the accuracy and mean squared error
+                    predictions = np.argmax(A[self.hidden_layers_amount], 0)
+                    accuracy = calculate_accuracy(predictions, y_batch)
+                    loss = calculate_MSE(predictions, y_batch)
+
+                    print("Iteration:", count,
+                          "Accuracy: {0:.4f}".format(accuracy),
+                          "Loss: {0:.4f}".format(loss),
+                          "Computation time: {0:.2f}ms".format((iteration_end - iteration_start) * 1000))
 
             # Implement early stopping if loss doesn't improve fast enough
             loss_list.append(loss)
-            stopping_patience = round(epochs * 0.25)
-            # Stop the loop if in the last 25% of epochs the loss has dropped less than the stopping threshold
+            stopping_patience = round(epochs * 0.15)
+            # Stop the loop if in the last 15% of epochs the loss has dropped less than the stopping threshold
             if len(loss_list) > stopping_patience and loss - loss_list[len(loss_list) - stopping_patience] > -stopping_threshold:
                 print("Early stopping | Epoch: {0}/{1}".format(epoch, epochs))
                 print("Accuracy: {0:.4f}".format(accuracy), "Loss: {0:.4f}".format(loss))
                 break
+            # End counter to calculate run time of epoch
+            epoch_end = process_time()
+            print("Epoch computation time: {0:.2f}s\n".format((epoch_end - epoch_start)))
         plt.plot(loss_list)
         plt.show()
 
@@ -257,38 +276,17 @@ class NeuralNetwork:
         plt.show()
 
 
-# Set the seed
-seed = 1
-rng = np.random.default_rng(seed)
+def load_mnist():
+    data_path = join(dirname(dirname(abspath(__file__))), 'data')
 
-data_path = join(dirname(dirname(abspath(__file__))), 'data')
+    # Load image and label files and convert them to numpy array
+    image_file = join(data_path, 'MNIST/train-images-idx3-ubyte')
+    label_file = join(data_path, 'MNIST/train-labels-idx1-ubyte')
 
-# Load image and label files and convert them to numpy array
-image_file = join(data_path, 'train-images-idx3-ubyte')
-label_file = join(data_path, 'train-labels-idx1-ubyte')
+    image_array = idx2numpy.convert_from_file(image_file)
+    label_array = idx2numpy.convert_from_file(label_file)
 
-image_array = idx2numpy.convert_from_file(image_file)
-label_array = idx2numpy.convert_from_file(label_file)
+    # Reshape the data so it's 60000, 784 instead of 60000, 28, 28 and add label column
+    data = np.c_[label_array, image_array.reshape(60000, 784)]
 
-# Reshape the data so it's 60000, 784 instead of 60000, 28, 28 and add label column
-data = np.c_[label_array, image_array.reshape(60000, 784)]
-
-# Shuffle the data and split it into training and testing sets
-row_amount, column_amount = data.shape
-rng.shuffle(data)
-
-testing_data = data[0:15000].T
-testing_data_Y = testing_data[0]
-testing_data_X = testing_data[1:column_amount] / 255
-
-training_data = data[45000:row_amount].T
-training_data_Y = training_data[0]
-training_data_X = training_data[1:column_amount] / 255
-
-# Initialise model and fit it to the training data
-model = NeuralNetwork(hidden_layers_amount=1, hidden_nodes_amount=20, learning_rate=.2, activation_function="relu", seed=seed)
-model.fit(training_data_X, training_data_Y, epochs=500, batch_size=100, stopping_threshold=-1, dropout_rate=0.5)
-
-# Test the model against the testing data
-test_predictions = model.predict(testing_data_X)
-print("\nAccuracy on testing data:", calculate_accuracy(test_predictions, testing_data_Y))
+    return data
