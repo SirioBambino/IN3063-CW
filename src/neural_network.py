@@ -250,10 +250,9 @@ class NeuralNetwork:
                           "Computation time: {0:.2f}ms".format((iteration_end - iteration_start) * 1000))
 
             # Implement early stopping if loss doesn't improve fast enough
-            loss_list.append(loss)
             stopping_patience = round(epochs * 0.3)
             # Stop the loop if in the last 30% of epochs the loss has dropped less than the stopping threshold
-            if len(loss_list) > stopping_patience and loss - loss_list[len(loss_list) - stopping_patience] > -stopping_threshold:
+            if epoch > stopping_patience and loss - loss_list[len(loss_list) - stopping_patience] > -stopping_threshold:
                 print("Early stopping | Epoch: {0}/{1}".format(epoch, epochs))
                 print("Accuracy: {0:.4f}".format(accuracy), "Loss: {0:.4f}".format(loss))
                 break

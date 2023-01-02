@@ -6,13 +6,6 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 
-training_data = datasets.FashionMNIST(root="data", train=True, download=True, transform=transforms.ToTensor())
-testing_data = datasets.FashionMNIST(root="data", train=False, download=True, transform=transforms.ToTensor())
-
-training_loader = torch.utils.data.DataLoader(training_data, batch_size=100)
-testing_loader = torch.utils.data.DataLoader(testing_data, batch_size=100, shuffle=True)
-
-
 def calculate_accuracy(predictions, labels):
     return (predictions == labels).sum() / len(labels)
 
