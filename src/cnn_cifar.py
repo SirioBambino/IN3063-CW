@@ -6,8 +6,8 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 
-training_data = datasets.FashionMNIST(root="data", train=True, download=True, transform=transforms.ToTensor())
-testing_data = datasets.FashionMNIST(root="data", train=False, download=True, transform=transforms.ToTensor())
+training_data = datasets.CIFAR10(root="data", train=True, download=True, transform=transforms.ToTensor())
+testing_data = datasets.CIFAR10(root="data", train=False, download=True, transform=transforms.ToTensor())
 
 training_loader = torch.utils.data.DataLoader(training_data, batch_size=100)
 testing_loader = torch.utils.data.DataLoader(testing_data, batch_size=100, shuffle=True)
@@ -17,28 +17,73 @@ def calculate_accuracy(predictions, labels):
     return (predictions == labels).sum() / len(labels)
 
 
-class CNN(nn.Module):
+class CNNCIFAR(nn.Module):
 
     def __init__(self):
-        super(CNN, self).__init__()
+        super(CNNCIFAR, self).__init__()
+
+        self.network = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),  # output: 64 x 16 x 16
+            nn.BatchNorm2d(64),
+
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),  # output: 128 x 8 x 8
+            nn.BatchNorm2d(128),
+
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),  # output: 256 x 4 x 4
+            nn.BatchNorm2d(256),
+
+            nn.Flatten(),
+            nn.Linear(256 * 4 * 4, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Linear(512, 10))
 
         self.layer_1 = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.MaxPool2d(2)
+            nn.MaxPool2d(2),
+            nn.BatchNorm2d(32)
         )
 
         self.layer_2 = nn.Sequential(
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.MaxPool2d(2)
+            nn.MaxPool2d(2),
+            nn.BatchNorm2d(64)
         )
 
         self.layer_3 = nn.Sequential(
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.BatchNorm2d(128)
+        )
+
+        self.layer_4 = nn.Sequential(
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.BatchNorm2d(256)
+        )
+
+        self.layer_5 = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(in_features=2304, out_features=450),
+            nn.Linear(in_features=1024, out_features=512),
             nn.Dropout(0.25),
-            nn.Linear(in_features=450, out_features=10),
+            nn.Linear(in_features=512, out_features=10)
         )
 
     def forward(self, x):
@@ -46,14 +91,20 @@ class CNN(nn.Module):
         output = self.layer_1(x)
         # Pass output from the previous layer through second set of Convolutional -> RelU -> Pooling layers
         output = self.layer_2(output)
-        # Flatten output from the previous layer and pass it through set of 2 Fully Connected layers with
-        # dropout between them
+        # Pass output from the previous layer through third set of Convolutional -> RelU -> Pooling layers
         output = self.layer_3(output)
+        # Pass output from the previous layer through fourth set of Convolutional -> RelU -> Pooling layers
+        output = self.layer_4(output)
+        # Flatten output from the previous layer and pass it through set of 3 Fully Connected layers with
+        # dropout between them
+        output = self.layer_5(output)
 
         return output
 
     # Train the network against the given data
     def fit(self, data_loader, epochs, error_function, optimiser):
+        accuracy_list = []
+        loss_list = []
         for epoch in range(epochs):
             print("Epoch: {0}/{1}".format(epoch + 1, epochs))
             # Start counter to calculate run time of epoch
@@ -89,14 +140,13 @@ class CNN(nn.Module):
                     # Forward propagation
                     outputs = self(images)
 
-                    # Calculate loss and accuracy
+                    # Calculate loss and accuracy  and save results to arrays
                     loss = error_function(outputs, labels)
                     predictions = torch.max(outputs, 1)[1]
                     accuracy = calculate_accuracy(predictions, labels)
 
                     accuracy_list.append(accuracy)
                     loss_list.append(loss.data)
-                    iteration_list.append(count)
 
                     print("Iteration:", count,
                           "Accuracy: {0:.4f}".format(accuracy),
@@ -106,6 +156,8 @@ class CNN(nn.Module):
             # End counter to calculate run time of epoch
             epoch_end = process_time()
             print("Epoch computation time: {0:.2f}s\n".format((epoch_end - epoch_start)))
+
+        return accuracy_list, loss_list
 
     def predict(self, data_loader, error_function):
         outputs = torch.Tensor()
@@ -123,22 +175,3 @@ class CNN(nn.Module):
         accuracy = calculate_accuracy(predictions, all_labels)
         print("Accuracy: {0:.4f}".format(accuracy), "Loss: {0:.4f}".format(loss))
         return predictions, all_labels
-
-
-seed = 0
-torch.manual_seed(0)
-
-model = CNN()
-
-loss_list = []
-iteration_list = []
-accuracy_list = []
-
-model.fit(training_loader, epochs=1, error_function=nn.CrossEntropyLoss(),
-          optimiser=torch.optim.Adam(model.parameters(), 0.001))
-
-predictions, labels = model.predict(training_loader, error_function=nn.CrossEntropyLoss())
-
-from confusion_matrix import confusion_matrix
-
-confusion_matrix = confusion_matrix(predictions.numpy(), labels.numpy())

@@ -194,6 +194,7 @@ class NeuralNetwork:
 
     # Train the network against the given data
     def fit(self, X, y, epochs, batch_size, stopping_threshold, dropout_rate):
+        accuracy_list = []
         loss_list = []
         X = X.T
         for epoch in range(epochs):
@@ -231,14 +232,17 @@ class NeuralNetwork:
                 count += 1
 
                 # Print some information about the model every 50 iterations
-                if count % 50 == 0:
+                if count % 100 == 0:
                     # Forward propagation
                     Z, A = self.forward_propagation(X_batch, 0)
 
-                    # Calculate the accuracy and mean squared error
+                    # Calculate the accuracy and mean squared error and save results to arrays
                     predictions = np.argmax(A[self.hidden_layers_amount], 0)
                     accuracy = calculate_accuracy(predictions, y_batch)
                     loss = calculate_MSE(predictions, y_batch)
+
+                    accuracy_list.append(accuracy)
+                    loss_list.append(loss)
 
                     print("Iteration:", count,
                           "Accuracy: {0:.4f}".format(accuracy),
@@ -247,17 +251,18 @@ class NeuralNetwork:
 
             # Implement early stopping if loss doesn't improve fast enough
             loss_list.append(loss)
-            stopping_patience = round(epochs * 0.15)
-            # Stop the loop if in the last 15% of epochs the loss has dropped less than the stopping threshold
+            stopping_patience = round(epochs * 0.3)
+            # Stop the loop if in the last 30% of epochs the loss has dropped less than the stopping threshold
             if len(loss_list) > stopping_patience and loss - loss_list[len(loss_list) - stopping_patience] > -stopping_threshold:
                 print("Early stopping | Epoch: {0}/{1}".format(epoch, epochs))
                 print("Accuracy: {0:.4f}".format(accuracy), "Loss: {0:.4f}".format(loss))
                 break
+
             # End counter to calculate run time of epoch
             epoch_end = process_time()
             print("Epoch computation time: {0:.2f}s\n".format((epoch_end - epoch_start)))
-        plt.plot(loss_list)
-        plt.show()
+
+        return accuracy_list, loss_list
 
     def predict(self, X):
         _, A = self.forward_propagation(X, 0)
