@@ -119,8 +119,7 @@ class NeuralNetwork:
     def forward_propagation(self, X, dropout_rate):
         # Z: Dot product of input and weight + bias
         # A: Activation of Z
-        Z = []
-        A = []
+        Z, A = [], []
         for i in range(self.hidden_layers_amount + 1):
             # On the output layer find the dot of weights and the previous
             # layer's A, add the bias and pass the result through the
@@ -194,8 +193,8 @@ class NeuralNetwork:
 
     # Train the network against the given data
     def fit(self, X, y, epochs, batch_size, stopping_threshold, dropout_rate):
-        losses = []
-        for i in range(epochs):
+        loss_list = []
+        for epoch in range(epochs):
             # Start counter to calculate run time of epoch
             start = perf_counter()
 
@@ -215,8 +214,8 @@ class NeuralNetwork:
             self.update_parameters(weights_derivatives, biases_derivatives)
 
             # The network's predictions after an epoch cycle
-            #Z, A = self.forward_propagation(X, 0)
-            predictions = self.get_predictions(A[self.hidden_layers_amount])
+            Z, A = self.forward_propagation(X, 0)
+            predictions = np.argmax(A[self.hidden_layers_amount], 0)
             # Calculate the accuracy and mean squared error using the predictions
             accuracy = calculate_accuracy(predictions, y)
             loss = calculate_MSE(predictions, y)
@@ -224,34 +223,31 @@ class NeuralNetwork:
             # End counter to calculate run time of epoch
             end = perf_counter()
 
-            # Print some information every 10 epochs
-            if i % 10 == 0:
-                print("Epoch: {0}/{1}".format(i, epochs), "Computation time: {0:.2f}ms".format((end-start)*1000))
+            # Print some information about the model every 10 epochs
+            if epoch % 10 == 0:
+                print("Epoch: {0}/{1}".format(epoch, epochs), "Computation time: {0:.2f}ms".format((end-start)*1000))
                 # Z, A = self.forward_propagation(X)
                 print("Accuracy: {0:.4f}".format(accuracy), "Loss: {0:.4f}\n".format(loss))
 
             # Implement early stopping if loss doesn't improve fast enough
-            losses.append(loss)
+            loss_list.append(loss)
             stopping_patience = round(epochs * 0.25)
             # Stop the loop if in the last 25% of epochs the loss has dropped less than the stopping threshold
-            if len(losses) > stopping_patience and loss - losses[len(losses) - stopping_patience] > -stopping_threshold:
-                print("Early stopping | Epoch: {0}/{1}".format(i, epochs))
+            if len(loss_list) > stopping_patience and loss - loss_list[len(loss_list) - stopping_patience] > -stopping_threshold:
+                print("Early stopping | Epoch: {0}/{1}".format(epoch, epochs))
                 print("Accuracy: {0:.4f}".format(accuracy), "Loss: {0:.4f}".format(loss))
                 break
-        plt.plot(losses)
+        plt.plot(loss_list)
         plt.show()
 
-    def get_predictions(self, output_layer):
-        return np.argmax(output_layer, 0)
-
-    def make_predictions(self, X):
+    def predict(self, X):
         _, A = self.forward_propagation(X, 0)
-        predictions = self.get_predictions(A[len(A)-1])
+        predictions = np.argmax(A[len(A)-1], 0)
         return predictions
 
     def test_prediction(self, index, X, y):
         current_image = X[:, index, None]
-        prediction = self.make_predictions(X[:, index, None])
+        prediction = np.argmax(X[:, index, None], 0)
         label = y[index]
         print("Prediction: ", prediction)
         print("Label: ", label)
@@ -291,8 +287,8 @@ training_data_X = training_data[1:column_amount] / 255
 
 # Initialise model and fit it to the training data
 model = NeuralNetwork(hidden_layers_amount=1, hidden_nodes_amount=20, learning_rate=.2, activation_function="relu", seed=seed)
-model.fit(training_data_X, training_data_Y, epochs=500, batch_size=50, stopping_threshold=-1, dropout_rate=0.5)
+model.fit(training_data_X, training_data_Y, epochs=500, batch_size=100, stopping_threshold=-1, dropout_rate=0.5)
 
 # Test the model against the testing data
-test_predictions = model.make_predictions(testing_data_X)
+test_predictions = model.predict(testing_data_X)
 print("\nAccuracy on testing data:", calculate_accuracy(test_predictions, testing_data_Y))
